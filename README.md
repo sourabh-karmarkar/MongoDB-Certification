@@ -52,7 +52,7 @@ use database_name
 ### Show the list of all the documents in the specified collection
 
 ```
-db.collection_name.find().pretty()
+db.collection_name.find()
 ```
 
 ### Inserting a single document in the database
@@ -67,7 +67,7 @@ db.collection_name.insertOne({
 
 ### Inserting multiple documents in the database
 
-    - By default inserts multiple documents in ordered format, if it encounters error then it stops further insertion
+- By default inserts multiple documents in ordered format, if it encounters error then it stops further insertion
     
 ```
 db.collection_name.insertMany([{
@@ -99,7 +99,7 @@ db.collection_name.insertMany([{
 db.movies.find({
     mpaaRating: "PG-13",
     year: 2009
-}).pretty()
+})
 ```
 
 ### Find documents based on some condition (array fields)
@@ -166,7 +166,7 @@ db.movies.find({
     genre: "Action, Adventure"
 }, {
     title: 1
-}).pretty()
+})
 ```
 
 - will print all the fields except the title field of the documents matching the specified condition (excludes title)
@@ -175,7 +175,7 @@ db.movies.find({
     genre: "Action, Adventure"
 }, {
     title: 0
-}).pretty()
+})
 ```
 
 - the below projection will just print titles excluding the _id field as it is specified explicitly.
@@ -185,7 +185,7 @@ db.movies.find({
 }, {
     title: 1,
     _id: 0
-}).pretty()
+})
 ```
 
 ### Updating documents
