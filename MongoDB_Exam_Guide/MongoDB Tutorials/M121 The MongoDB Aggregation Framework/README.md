@@ -4,6 +4,8 @@
 mongo "mongodb://cluster0-shard-00-00-jxeqq.mongodb.net:27017,cluster0-shard-00-01-jxeqq.mongodb.net:27017,cluster0-shard-00-02-jxeqq.mongodb.net:27017/aggregations?replicaSet=Cluster0-shard-0" --authenticationDatabase admin --ssl -u m121 -p aggregations --norc
 ```
 
+
+
 ### $match
 
 ```
@@ -205,3 +207,84 @@ db.movies.aggregate([{
 }]).itcount();
 ```
 Answer is : 8068
+
+- Optional Lab - Expressions with $project
+
+    - Let's find how many movies in our movies collection are a "labor of love", where the same person appears in cast, directors, and writers
+    - Note that you may have a dataset that has duplicate entries for some films. Don't worry if you count them few times, meaning you should not try to find those duplicates.
+
+```
+db.movies.aggregate([{
+    $match: {
+        cast: {
+            $elemMatch: {
+                $exists: true
+            }
+        },
+        directors: {
+            $elemMatch: {
+                $exists: true
+            }
+        },
+        writers: {
+            $elemMatch: {
+                $exists: true
+            }
+        }
+    }
+}, {
+    $project: {
+        _id: 0,
+        cast: {
+            $map: {
+                input: "$cast",
+                as: "castName",
+                in: {
+                    $arrayElemAt: [{
+                        $split: ["$$castName", " ("]
+                    }, 0]
+                }
+            }
+        },
+        directors: {
+            $map: {
+                input: "$directors",
+                as: "director",
+                in: {
+                    $arrayElemAt: [{
+                        $split: ["$$director", " ("]
+                    }, 0]
+                }
+            }
+        },
+        writers: {
+            $map: {
+                input: "$writers",
+                as: "writer",
+                in: {
+                    $arrayElemAt: [{
+                        $split: ["$$writer", " ("]
+                    }, 0]
+                }
+            }
+        }
+    }
+}, {
+    $project: {
+        "labors of love": {
+            $gt: [{
+                $size: {
+                    $setIntersection: ["$cast", "$directors", "$writers"]
+                }
+            }, 0]
+        }
+    }
+}, {
+    $match: {
+        "labors of love": true
+    }
+}, {
+    $count: "labors of love"
+}])
+```
+Answer is : 1597
