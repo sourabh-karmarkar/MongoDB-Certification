@@ -4,8 +4,6 @@
 mongo "mongodb://cluster0-shard-00-00-jxeqq.mongodb.net:27017,cluster0-shard-00-01-jxeqq.mongodb.net:27017,cluster0-shard-00-02-jxeqq.mongodb.net:27017/aggregations?replicaSet=Cluster0-shard-0" --authenticationDatabase admin --ssl -u m121 -p aggregations --norc
 ```
 
-
-
 ### $match
 
 ```
@@ -624,3 +622,531 @@ db.movies.aggregate([{
 }])
 ```
 Answer is : The Christmas Tree
+
+### The $group stage
+
+```
+db.movies.aggregate([{
+    $group: {
+        _id: "$year"
+    }
+}])
+```
+
+```
+db.movies.aggregate([{
+    $group: {
+        _id: "$year",
+        num_of_films: {
+            $sum: 1
+        }
+    }
+}])
+```
+
+```
+db.movies.aggregate([{
+    $group: {
+        _id: "$year",
+        num_of_films: {
+            $sum: 1
+        }
+    }
+}, {
+    $sort: {
+        num_of_films: -1
+    }
+}])
+```
+
+```
+db.movies.aggregate([{
+        $group: {
+            _id: {
+                numDirectors: {
+                    $cond: [{
+                            $isArray: "$directors"
+                        }, {
+                            $size: "$directors"
+                        },
+                        0
+                    ]
+                }
+            },
+            numFilms: {
+                $sum: 1
+            },
+            averageMetacritic: {
+                $avg: "$metacritic"
+            },
+        }
+    },
+    {
+        $sort: {
+            "_id.numDirectors": -1
+        }
+    }
+])
+```
+
+```
+db.movies.aggregate([{
+    $group: {
+        _id: null,
+        "count": {
+            $sum: 1
+        }
+    }
+}])
+```
+
+```
+db.movies.aggregate([{
+    $match: {
+        metacritic: {
+            $gte: 0
+        }
+    }
+}, {
+    $group: {
+        _id: null,
+        averageMetaCritic: {
+            $avg: "$metacritic"
+        }
+    }
+}])
+```
+
+- Things to remember:
+    1) _id is where to specify what incoming documents should be grouped on
+    2) Can use all accumulator expressions within $group
+    3) $group can be used multiple times within a pipeline
+    4) It may be necessary to sanitize incoming data.
+
+### Accumulator Expressions with $project
+
+```
+db.icecream_data.aggregate([{
+    $project: {
+        _id: 0,
+        max_high: {
+            $reduce: {
+                input: "$trends",
+                initialValue: -Infinity,
+                in: {
+                    $cond: [{
+                        $gt: ["$$this.avg_high_tmp", "$$value"]
+                    }, "$$this.avg_high_tmp", "$$value"]
+                }
+            }
+        }
+    }
+}])
+```
+
+```
+db.icecream_data.aggregate([{
+    $project: {
+        _id: 0,
+        max_high: {
+            $max: "$trends.avg_high_tmp"
+        }
+    }
+}])
+```
+
+```
+db.icecream_data.aggregate([{
+    $project: {
+        _id: 0,
+        max_low: {
+            $min: "$trends.avg_low_tmp"
+        }
+    }
+}])
+```
+
+```
+db.icecream_data.aggregate([{
+    $project: {
+        _id: 0,
+        average_cpi: {
+            $avg: "$trends.icecream_cpi"
+        },
+        cpi_deviation: {
+            $stdDevPop: "$trends.icecream_cpi"
+        }
+    }
+}])
+```
+
+```
+db.icecream_data.aggregate([{
+    $project: {
+        _id: 0,
+        "yearly_sales (millions)": {
+            $sum: "$trends.icecream_sales_in_millions"
+        }
+    }
+}])
+```
+
+- Things to remember:
+    1) Available Accumulator Expressions : $sum, $avg, $max, $min, $stdDevPop, $stdDevSam
+    2) Expressions have no memory between documents
+    3) May still have to use $reduce or $map for more complex calculations
+
+- Lab - $group and Accumulators
+
+```
+db.movies.aggregate([{
+    $match: {
+        awards: {
+            $regex: /Won \d{1,2} Oscars?/
+        }
+    }
+}, {
+    $group: {
+        _id: null,
+        highest_rating: {
+            $max: "$imdb.rating"
+        },
+        lowest_rating: {
+            $min: "$imdb.rating"
+        },
+        average_rating: {
+            $avg: "$imdb.rating"
+        },
+        deviation: {
+            $stdDevSamp: "$imdb.rating"
+        }
+    }
+}])
+```
+
+### The $unwind stage
+
+```
+db.movies.aggregate([{
+        $match: {
+            "imdb.rating": {
+                $gt: 0
+            },
+            year: {
+                $gte: 2010,
+                $lte: 2015
+            },
+            runtime: {
+                $gte: 90
+            }
+        }
+    }, {
+        $unwind: "$genres"
+    },
+    {
+        $group: {
+            _id: {
+                year: "$year",
+                genre: "$genres"
+            },
+            average_rating: {
+                $avg: "$imdb.rating"
+            }
+        }
+    },
+    {
+        $sort: {
+            "_id.year": -1,
+            average_rating: -1
+        }
+    },
+    {
+        $group: {
+            _id: "$_id.year",
+            genre: {
+                $first: "$_id.genre"
+            },
+            average_rating: {
+                $first: "$average_rating"
+            }
+        }
+    },
+    {
+        $sort: {
+            _id: -1
+        }
+    }
+])
+```
+
+- Things to remember:
+    1) $unwind only works on array values
+    2) There are 2 forms for unwind, short form and long form
+    3) Using unwind on large collections with big documents may lead to performance issues
+
+- Lab - $unwind
+
+```
+db.movies.aggregate([{
+        $match: {
+            languages: "English"
+        }
+    },
+    {
+        $project: {
+            _id: 0,
+            cast: 1,
+            "imdb.rating": 1
+        }
+    },
+    {
+        $unwind: "$cast"
+    }, {
+        $group: {
+            _id: "$cast",
+            numFilms: {
+                $sum: 1
+            },
+            average: {
+                $avg: "$imdb.rating"
+            }
+        }
+    },
+    {
+        $project: {
+            numFilms: 1,
+            average: {
+                $divide: [{
+                    $trunc: {
+                        $multiply: ["$average", 10]
+                    }
+                }, 10]
+            }
+        }
+    }, {
+        $sort: {
+            numFilms: -1
+        }
+    },
+    {
+        $limit: 1
+    }
+])
+```
+
+### The $lookup stage
+
+```
+db.air_alliances.aggregate([{
+    $lookup: {
+        from: "air_airlines",
+        localField: "airlines",
+        foreignField: "name",
+        as: "airlines"
+    }
+}])
+```
+
+- Things to remember:
+    1) The from collection cannot be sharded
+    2) The from collection must be in the same database
+    3) The values in the localField and foreignField are matched on equality
+    4) as can be any name, but if it exists in the working document that field will be overwritten
+
+- Lab - Using $lookup
+
+Which alliance from air_alliances flies the most routes with either a Boeing 747 or an Airbus A380 (abbreviated 747 and 380 in air_routes)?
+
+```
+db.air_routes.aggregate([{
+    $match: {
+        airplane: /747|380/
+    }
+}, {
+    $lookup: {
+        from: "air_alliances",
+        foreignField: "airlines",
+        localField: "airline.name",
+        as: "alliance"
+    }
+}, {
+    $unwind: "$alliance"
+}, {
+    $group: {
+        _id: "$alliance.name",
+        count: {
+            $sum: 1
+        }
+    }
+}, {
+    $sort: {
+        count: -1
+    }
+}, {
+    $limit: 1
+}])
+```
+
+Answer is : { "_id" : "SkyTeam", "count" : 16 }
+
+### $graphLookup : Introduction
+
+- Finding all the persons that report to the CTO directly or indirectly
+
+```
+db.parent_reference.aggregate([{
+    $match: {
+        name: "Eliot"
+    }
+}, {
+    $graphLookup: {
+        from: "parent_reference",
+        startWith: "$_id",
+        connectFromField: "_id",
+        connectToField: "reports_to",
+        as: "all_reports"
+    }
+}])
+```
+
+- Finding the chain uptill the root element from a specified element.
+
+```
+db.parent_reference.aggregate([{
+    $match: {
+        name: "Shannon"
+    }
+}, {
+    $graphLookup: {
+        from: "parent_reference",
+        startWith: "$reports_to",
+        connectFromField: "reports_to",
+        connectToField: "_id",
+        as: "bosses"
+    }
+}])
+```
+
+### $graphLookup : Simple Lookup Reverse Schema
+
+```
+db.child_reference.aggregate([{
+    $match: {
+        name: "Dev"
+    }
+}, {
+    $graphLookup: {
+        from: "child_reference",
+        startWith: "$direct_reports",
+        connectFromField: "direct_reports",
+        connectToField: "name",
+        as: "all_reports"
+    }
+}])
+```
+
+### $graphLookup : maxDepth and depthField
+
+```
+db.child_reference.aggregate([{
+    $match: {
+        name: "Dev"
+    }
+}, {
+    $graphLookup: {
+        from: "child_reference",
+        startWith: "$direct_reports",
+        connectFromField: "direct_reports",
+        connectToField: "name",
+        as: "till_2_level_reports",
+        maxDepth: 1,
+        depthField: "level"
+    }
+}])
+```
+
+### $graphLookup : Cross Collection Lookup
+
+```
+db.air_airlines.aggregate([{
+    $match: {
+        name: "TAP Portugal"
+    }
+}, {
+    $graphLookup: {
+        from: "air_routes",
+        as: "chain",
+        startWith: "$base",
+        connectFromField: "dst_airport",
+        connectToField: "src_airport",
+        maxDepth: 1,
+        restrictSearchWithMatch: {
+            "airline.name": "TAP Portugal"
+        }
+    }
+}])
+```
+
+- Lab: $graphLookup
+
+```
+db.air_alliances.aggregate([{
+        $match: {
+            name: "OneWorld"
+        }
+    },
+    {
+        $graphLookup: {
+            startWith: "$airlines",
+            from: "air_airlines",
+            connectFromField: "name",
+            connectToField: "name",
+            as: "airlines",
+            maxDepth: 0,
+            restrictSearchWithMatch: {
+                country: {
+                    $in: ["Germany", "Spain", "Canada"]
+                }
+            }
+        }
+    },
+    {
+        $graphLookup: {
+            startWith: "$airlines.base",
+            from: "air_routes",
+            connectFromField: "dst_airport",
+            connectToField: "src_airport",
+            as: "connections",
+            maxDepth: 1
+        }
+    },
+    {
+        $project: {
+            validAirlines: "$airlines.name",
+            "connections.dst_airport": 1,
+            "connections.airline.name": 1
+        }
+    },
+    {
+        $unwind: "$connections"
+    },
+    {
+        $project: {
+            isValid: {
+                $in: ["$connections.airline.name", "$validAirlines"]
+            },
+            "connections.dst_airport": 1
+        }
+    },
+    {
+        $match: {
+            isValid: true
+        }
+    },
+    {
+        $group: {
+            _id: "$connections.dst_airport"
+        }
+    }
+])
+```
