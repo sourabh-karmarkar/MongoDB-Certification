@@ -1150,3 +1150,404 @@ db.air_alliances.aggregate([{
     }
 ])
 ```
+
+### Facets : Single Facet Query
+
+- Load the companies.json in handouts to the your mongodb atlas cluster
+
+```
+db.companies.createIndex({
+    description: "text",
+    overview: "text"
+})
+```
+```
+db.companies.aggregate([{
+    $match: {
+        $text: {
+            $search: "network"
+        }
+    }
+}])
+```
+```
+db.companies.aggregate([{
+    $match: {
+        $text: {
+            $search: "network"
+        }
+    }
+}, {
+    $sortByCount: "$category_code"
+}])
+```
+```
+db.companies.aggregate([{
+    $match: {
+        $text: {
+            $search: "network"
+        }
+    }
+}, {
+    $unwind: "$offices"
+}, {
+    $match: {
+        "offices.city": {
+            $ne: ""
+        }
+    }
+}, {
+    $sortByCount: "$offices.city"
+}])
+```
+
+### The $bucket Stage
+
+```
+db.movies.aggregate([{
+    $bucket: {
+        groupBy: "$imdb.rating",
+        boundaries: [0, 5, 8, Infinity],
+        default: "not rated"
+    }
+}])
+```
+
+```
+db.movies.aggregate([{
+    $bucket: {
+        groupBy: "$imdb.rating",
+        boundaries: [0, 5, 8, Infinity],
+        default: "not rated",
+        output: {
+            average_per_bucket: {
+                $avg: "$imdb.rating"
+            },
+            count: {
+                $sum: 1
+            }
+        }
+    }
+}])
+```
+
+### Facets: Manual Buckets
+
+```
+db.companies.aggregate([{
+    $match: {
+        founded_year: {
+            $gt: 1980
+        },
+        number_of_employees: {
+            $ne: null
+        }
+    }
+}, {
+    $bucket: {
+        groupBy: "$number_of_employees",
+        boundaries: [0, 20, 50, 100, 500, 1000, Infinity]
+    }
+}])
+```
+
+```
+db.col.insert({x : 'a'})
+
+db.col.aggregate([{
+    $bucket: {
+        groupBy: "$x",
+        boundaries: [0, 50, 100]
+    }
+}])
+
+db.col.aggregate([{
+    $bucket: {
+        groupBy: "$x",
+        boundaries: [0, 50, 100],
+        default: "Other"
+    }
+}])
+```
+
+```
+db.companies.aggregate([{
+    $match: {
+        founded_year: {
+            $gt: 1980
+        }
+    }
+}, {
+    $bucket: {
+        groupBy: "$number_of_employees",
+        boundaries: [0, 20, 50, 100, 500, 1000, Infinity],
+        default: "Other"
+    }
+}])
+```
+
+```
+db.companies.aggregate([{
+    $match: {
+        founded_year: {
+            $gt: 1980
+        }
+    }
+}, {
+    $bucket: {
+        groupBy: "$number_of_employees",
+        boundaries: [0, 20, 50, 100, 500, 1000, Infinity],
+        default: "Other",
+        output: {
+            total: {
+                $sum: 1
+            },
+            average: {
+                $avg: "$number_of_employees"
+            },
+            categories: {
+                $addToSet: "$category_code"
+            }
+        }
+    }
+}])
+```
+
+- Things to remember
+    1) Must always specify atleast 2 values to boundaries
+    2) boundaries must all be of the same general type (Numeric, String)
+    3) count is inserted by default with no output, but removed when output is specified
+
+# The $bucketAuto Stage
+
+```
+db.movieDetails.aggregate([{
+    $match: {
+        "imdb.rating": {
+            $gte: 0
+        }
+    }
+}, {
+    $bucketAuto: {
+        groupBy: "$imdb.rating",
+        buckets: 4,
+        output: {
+            average_per_bucket: {
+                $avg: "$imdb.rating"
+            },
+            count: {
+                $sum: 1
+            }
+        }
+    }
+}])
+```
+
+```
+use agg
+
+function make_granularity_values() {
+    for (let i = 0; i < 100; i++) {
+        db.granularity_test.insertOne({
+            powers_of_2: Math.pow(2, Math.floor(Math.random() * 10)),
+            renard_and_e: Math.random() * 10
+        })
+    }
+}
+
+make_granularity_values()
+
+db.granularity_test.count()
+
+db.granularity_test.aggregate([{
+    $bucketAuto: {
+        groupBy: "$powers_of_2",
+        buckets: 10,
+        granularity: "POWERSOF2"
+    }
+}])
+```
+
+### Facets: Auto Buckets
+
+```
+db.companies.aggregate([{
+    $match: {
+        "offices.city": "New York"
+    }
+}, {
+    $bucketAuto: {
+        groupBy: "$founded_year",
+        buckets: 5,
+        output: {
+            total: {
+                $sum: 1
+            },
+            average: {
+                $avg: "$number_of_employees"
+            }
+        }
+    }
+}])
+
+for (i = 1; i <= 1000; i++) {
+    db.series.insert({
+        _id: i
+    })
+}
+
+db.series.aggregate([{
+    $bucketAuto: {
+        groupBy: "$_id",
+        buckets: 5
+    }
+}])
+
+db.series.aggregate([{
+    $bucketAuto: {
+        groupBy: "$_id",
+        buckets: 5,
+        granularity: "R20"
+    }
+}])
+```
+
+- Things to remember
+    1) Cardinality of groupBy expression may impact even distribution and number of buckets
+    2) Specifying a granularity requires the expression to groupBy to resolve to a numeric value
+
+### Facets: Multiple Facets
+
+```
+db.companies.aggregate([{
+    $match: {
+        $text: {
+            $search: "Databases"
+        }
+    }
+}, {
+    $facet: {
+        Categories: [{
+            "$sortByCount": "$category_code"
+        }],
+        Employees: [{
+                $match: {
+                    founded_year: {
+                        $gt: 1980
+                    }
+                }
+            },
+            {
+                $bucket: {
+                    groupBy: "$number_of_employees",
+                    boundaries: [0, 20, 50, 100, 500, 1000, Infinity],
+                    default: "Other"
+                }
+            }
+        ],
+        Founded: [{
+            $match: {
+                "offices.city": "New York"
+            }
+        }, {
+            $bucketAuto: {
+                groupBy: "$founded_year",
+                buckets: 5
+            }
+        }]
+    }
+}])
+```
+
+- Lab - $facets
+
+How many movies are in both the top ten highest rated movies according to the imdb.rating and the metacritic fields? We should get these results with exactly one access to the database.
+
+```
+db.movies.aggregate([{
+        $match: {
+            metacritic: {
+                $gte: 0
+            },
+            "imdb.rating": {
+                $gte: 0
+            }
+        }
+    },
+    {
+        $project: {
+            _id: 0,
+            metacritic: 1,
+            imdb: 1,
+            title: 1
+        }
+    },
+    {
+        $facet: {
+            top_metacritic: [{
+                    $sort: {
+                        metacritic: -1,
+                        title: 1
+                    }
+                },
+                {
+                    $limit: 10
+                },
+                {
+                    $project: {
+                        title: 1
+                    }
+                }
+            ],
+            top_imdb: [{
+                    $sort: {
+                        "imdb.rating": -1,
+                        title: 1
+                    }
+                },
+                {
+                    $limit: 10
+                },
+                {
+                    $project: {
+                        title: 1
+                    }
+                }
+            ]
+        }
+    },
+    {
+        $project: {
+            movies_in_both: {
+                $setIntersection: ["$top_metacritic", "$top_imdb"]
+            }
+        }
+    }
+])
+```
+
+### The $sortByCount Stage
+
+```
+// We use the below query to sort and count the number of documents without $sortByCount
+db.movies.aggregate([{
+    $group: {
+        _id: "$imdb.rating",
+        count: {
+            $sum: 1
+        }
+    }
+}, {
+    $sort: {
+        count: -1
+    }
+}])
+
+// We use the below query to sort and count the number of documents using $sortByCount
+db.movies.aggregate([{
+    $sortByCount: "$imdb.rating"
+}])
+```
+
+- Things to remember
+    1) is equivalent to a group stage to count occurence, and then sorting in the descending order

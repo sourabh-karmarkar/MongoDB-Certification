@@ -34,3 +34,9 @@ mongo "mongodb+srv://cluster0-okti4.mongodb.net/test" --username database_userna
 ```
 load("file_name.js")
 ```
+
+### Importing JSON files to your atlas cluster
+
+```
+mongoimport --host cluster0-shard-00-01-okti4.mongodb.net:27017 --ssl -u database_username -p database_password --authenticationDatabase admin --db startups --collection companies --drop --file companies.json
+```
