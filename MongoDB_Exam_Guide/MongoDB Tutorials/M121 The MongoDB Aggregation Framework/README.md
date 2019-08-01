@@ -1551,3 +1551,110 @@ db.movies.aggregate([{
 
 - Things to remember
     1) is equivalent to a group stage to count occurence, and then sorting in the descending order
+
+### The $redact Stage
+
+Helps protect information from unauthorized access
+- $$DESCEND - Retain this level
+- $$PRUNE - Remove
+- $$KEEP - Retain
+
+```
+db.employees.aggregate([{
+    $redact: {
+        $cond: [{
+            $in: ["Management", "$acl"]
+        }, "$$DESCEND", "$$PRUNE"]
+    }
+}])
+```
+
+- Things to remember
+    1) $$KEEP and $$PRUNE automatically apply to all levels below the evaluated level
+    2) $$DESCEND retains the current level and evaluates the next level down
+    3) $redact is not for restricting access to a collection
+
+### The $out Stage
+
+- Takes the documents returned by the aggregation pipeline and writes them to a specified collection. The $out operator must be the last stage in the pipeline and cannot be used within a facet
+
+```
+// List the company having maximum number of offices and write it as a collection
+
+db.companies.aggregate([{
+    $project: {
+        _id: 0,
+        name: 1,
+        office_size: {
+            $size: "$offices"
+        }
+    }
+}, {
+    $sort: {
+        office_size: -1
+    }
+}, {
+    $limit: 1
+}, {
+    $out: "maximumOfficesCompany"
+}])
+```
+
+- Things to remember
+    1) Will create a new collection or overwrite an existing collection if specified
+    2) Honors indexes on existing collections
+    3) Will not create or overwrite data if pipeline errors
+    4) Created collection in the same database as the source collection
+
+### Views
+
+```
+db.createView("bronze_banking", "customers", [{
+    $match: {
+        accountType: "bronze"
+    },
+    $project: {
+        _id: 0,
+        name: {
+            $concat: [{
+                $cond: [{
+                    $eq: ["$gender", "female"]
+                }, "Miss", "Mr."]
+            }, " ", "$name.first", " ", "$name.last"]
+        },
+        phone: 1,
+        email: 1,
+        address: 1,
+        account_editing: {
+            $substr: ["$accountNumber", 7, -1]
+        }
+    }
+}])
+
+// getting all collections in a database and seeing their information
+db.getCollectionInfos()
+
+// getting information on views only
+db.system.views.find()
+```
+
+- Some restrictions on views
+    1) No write operations
+    2) No index operations (create, update)
+    3) No renaming
+    4) No mapReduce
+    5) No $text
+    6) No geoNear or $geoNear
+    7) Collation restrictions
+    8) find() operation with projection operators are not permitted.
+        - $
+        - $elemMatch
+        - $slice
+        - $meta
+
+- Things to remember
+    1) Views contain no data themselves. They are created on demand and reflect the data in the source collection.
+    2) Views are read only. Write operations to views will error.
+    3) Views have some restrictions. They must abide by the rules of the Aggregation Framework, and cannot contain the find() projection operators.
+    4) Horizontal slicing is performed with the $match stage, reducing the number of documents that are returned.
+    5) Vertical slicing is performed with a $project or other shaping stage, modifying individual documents.
